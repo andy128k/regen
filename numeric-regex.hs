@@ -1,11 +1,42 @@
 module Main (main) where
 
--- import qualified Data.Sequence as S
+import Control.Monad
+import Data.Foldable
+import qualified Data.Sequence as S
 import Data.List
 import CharSet
 
-data Expr = Set CharSet | Seq [Expr] | Alt [Expr] deriving (Eq)
---data RSeq = RSeq [Expr]
+newtype RSeq = RSeq (S.Seq Expr) deriving (Eq)
+
+isEmptySeq :: RSeq -> Bool
+isEmptySeq (RSeq s) = S.null s
+
+lengthSeq :: RSeq -> Int
+lengthSeq (RSeq q) = S.length q
+
+headSeq :: RSeq -> Expr
+headSeq (RSeq q) = S.index q 0
+
+tailSeq :: RSeq -> RSeq
+tailSeq (RSeq q) = RSeq $ S.drop 1 q
+
+lastSeq :: RSeq -> Expr
+lastSeq (RSeq q) = S.index q ((S.length q) - 1)
+
+initSeq :: RSeq -> RSeq
+initSeq (RSeq q) = RSeq $ S.take ((S.length q) - 1) q
+
+joinSeq :: RSeq -> RSeq -> RSeq
+joinSeq (RSeq p) (RSeq q) = RSeq $ p S.>< q
+
+prependSeq :: Expr -> RSeq -> RSeq
+prependSeq e (RSeq q) = RSeq $ e S.<| q
+
+newSeq :: [Expr] -> RSeq
+newSeq l = RSeq $ S.fromList l
+
+
+data Expr = Set CharSet | Seq (RSeq) | Alt [Expr] deriving (Eq)
 
 
 alt2 :: Expr -> Expr -> Expr
@@ -17,28 +48,34 @@ alt2 x y = Alt [x, y]
 
 alt :: [Expr] -> Expr
 alt [x] = x
-alt x = foldl1 alt2 x
+alt x = Data.List.foldl1 alt2 x
 
 
-flattened :: [Expr] -> [Expr]
-flattened [] = []
-flattened ((Seq s) : xs) = flattened (s ++ xs)
-flattened (x : xs) = x : flattened xs
+flattened :: RSeq -> RSeq
+flattened x
+  | isEmptySeq x = x
+flattened x = case headSeq x of
+  Seq s ->               flattened (joinSeq s (tailSeq x))
+  h     -> prependSeq h (flattened $ tailSeq x)
 
 
-mseq :: [Expr] -> Expr
-mseq [] = Set empty
-mseq [(Set r)] = Set r
+mseq :: RSeq -> Expr
+mseq x
+  | isEmptySeq x = Set empty
+
+mseq x
+  | (1 == lengthSeq x) = headSeq x
+
 mseq x = Seq $ flattened x
 
 
-detect :: (CharSet, [[Expr]], [Expr]) -> Expr -> (CharSet, [[Expr]], [Expr])
+detect :: (CharSet, [RSeq], [Expr]) -> Expr -> (CharSet, [RSeq], [Expr])
 detect (r, s, a) (Set chars) = (r >< chars, s, a)
 detect (r, s, a) (Seq exprs) = (r, s ++ [exprs], a)
 detect (r, s, a) (Alt exprs) = (r, s, a ++ exprs)
 
-split :: [Expr] -> (CharSet, [[Expr]], [Expr])
-split l = foldl detect (empty, [], []) l
+split :: [Expr] -> (CharSet, [RSeq], [Expr])
+split l = Data.List.foldl detect (empty, [], []) l
 
 
 -- partitionx :: Eq a => ([b] -> b) -> ([b] -> [b]) -> [[a]] -> [(a, [[a]])]
@@ -49,32 +86,32 @@ partitionx head tail sequences =
     startsWith v = filter (\x -> v == (head x)) sequences
 
 
-partition1 :: Eq a => [[a]] -> [(a, [[a]])]
-partition1 = partitionx head tail
+partition1 :: [RSeq] -> [(Expr, [RSeq])]
+partition1 = partitionx headSeq tailSeq
 
-partition9 :: Eq a => [[a]] -> [(a, [[a]])]
-partition9 = partitionx last init
+-- partition9 :: Eq a => [[a]] -> [(a, [[a]])]
+partition9 = partitionx lastSeq initSeq
 
 
-sq_seq :: [[Expr]] -> [Expr]
+sq_seq :: [RSeq] -> [Expr]
 sq_seq sequences =
   map Seq $ (sf . pr) sequences
   where
-    pr :: [[Expr]] -> [[Expr]]
+    pr :: [RSeq] -> [RSeq]
     pr x = map prepend $ partition1 x
 
-    sf :: [[Expr]] -> [[Expr]]
+    sf :: [RSeq] -> [RSeq]
     sf x = map append $ partition9 x
 
-    prepend :: (Expr, [[Expr]]) -> [Expr]
-    prepend (start, seqs) = flattened [start, (squeeze (alt (map mseq seqs)))]
+    prepend :: (Expr, [RSeq]) -> RSeq
+    prepend (start, seqs) = flattened $ newSeq [start, (squeeze (alt (map mseq seqs)))]
 
-    append :: (Expr, [[Expr]]) -> [Expr]
-    append (end, seqs) = flattened [(squeeze (alt (map mseq seqs))), end]
+    append :: (Expr, [RSeq]) -> RSeq
+    append (end, seqs) = flattened $ newSeq [(squeeze (alt (map mseq seqs))), end]
 
 
 squeeze :: Expr -> Expr
-squeeze (Seq s) = mseq $ map squeeze s
+squeeze (Seq (RSeq s)) = mseq $ newSeq (map squeeze (toList s))
 squeeze (Alt s) = case split s of
   (chars, sequences, alternates) -> alt (
       (makeChars chars) ++
@@ -91,15 +128,15 @@ squeeze s = s
 pad p s = (replicate (p - (length s)) '0') ++ s
 
 i2e :: Int -> Int -> Expr
-i2e p i = mseq $ map (\x -> Set $ single x) ((pad p) $ show i)
+i2e p i = mseq (newSeq $ map (\x -> Set $ single x) ((pad p) $ show i))
 
 range :: [Int] -> Int -> Expr
 range s p = Alt $ map (i2e p) s
 
 
 printE :: Int -> Expr -> [String]
-printE 0 (Seq s) = ["seq["] ++ (concatMap (printE 1) s) ++ ["]"]
-printE 0 (Alt s) = ["alt["] ++ (concatMap (printE 1) s) ++ ["]"]
+printE 0 (Seq (RSeq s)) = ["seq["] ++ (Data.List.concatMap (printE 1) (toList s)) ++ ["]"]
+printE 0 (Alt s) = ["alt["] ++ (Data.List.concatMap (printE 1) s) ++ ["]"]
 printE 0 (Set s) = [show s]
 printE i x = map (indent ++) (printE 0 x)
   where indent = replicate (i * 4) ' '
