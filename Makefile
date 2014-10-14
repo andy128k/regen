@@ -1,6 +1,8 @@
+SOURCES=charset.hs numeric-regex.hs 
+
 all:
-	ghc -O2 numeric-regex.hs 
+	ghc -o regen -O2 $(SOURCES)
 
 prof:
-	ghc -prof -fprof-auto -rtsopts numeric-regex.hs 
+	ghc -o regen -prof -fprof-auto -rtsopts $(SOURCES)
 

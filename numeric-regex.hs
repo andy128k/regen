@@ -1,12 +1,18 @@
-import Data.List
+module Main (main) where
 
-data Expr = Set [Char] | Seq [Expr] | Alt [Expr] deriving (Eq)
+-- import qualified Data.Sequence as S
+import Data.List
+import CharSet
+
+data Expr = Set CharSet | Seq [Expr] | Alt [Expr] deriving (Eq)
+--data RSeq = RSeq [Expr]
+
 
 alt2 :: Expr -> Expr -> Expr
 alt2 (Alt x) (Alt y) = Alt (x ++ y)
 alt2 (Alt x) y = Alt (x ++ [y])
 alt2 x (Alt y) = Alt (x : y)
-alt2 (Set x) (Set y) = Set (x ++ y)
+alt2 (Set x) (Set y) = Set (x >< y)
 alt2 x y = Alt [x, y]
 
 alt :: [Expr] -> Expr
@@ -21,18 +27,18 @@ flattened (x : xs) = x : flattened xs
 
 
 mseq :: [Expr] -> Expr
-mseq [] = Set []
+mseq [] = Set empty
 mseq [(Set r)] = Set r
 mseq x = Seq $ flattened x
 
 
-detect :: ([Char], [[Expr]], [Expr]) -> Expr -> ([Char], [[Expr]], [Expr])
-detect (r, s, a) (Set chars) = (r ++ chars, s, a)
+detect :: (CharSet, [[Expr]], [Expr]) -> Expr -> (CharSet, [[Expr]], [Expr])
+detect (r, s, a) (Set chars) = (r >< chars, s, a)
 detect (r, s, a) (Seq exprs) = (r, s ++ [exprs], a)
 detect (r, s, a) (Alt exprs) = (r, s, a ++ exprs)
 
-split :: [Expr] -> ([Char], [[Expr]], [Expr])
-split l = foldl detect ([], [], []) l
+split :: [Expr] -> (CharSet, [[Expr]], [Expr])
+split l = foldl detect (empty, [], []) l
 
 
 -- partitionx :: Eq a => ([b] -> b) -> ([b] -> [b]) -> [[a]] -> [(a, [[a]])]
@@ -75,16 +81,17 @@ squeeze (Alt s) = case split s of
       (sq_seq sequences) ++
       alternates )
   where
-    makeChars :: [Char] -> [Expr]
-    makeChars [] = []
-    makeChars chars = [Set chars]
+    makeChars :: CharSet -> [Expr]
+    makeChars chars = if (isEmpty chars)
+                      then []
+                      else [Set chars]
 squeeze s = s
 
 
 pad p s = (replicate (p - (length s)) '0') ++ s
 
 i2e :: Int -> Int -> Expr
-i2e p i = mseq $ map (\x -> Set [x]) ((pad p) $ show i)
+i2e p i = mseq $ map (\x -> Set $ single x) ((pad p) $ show i)
 
 range :: [Int] -> Int -> Expr
 range s p = Alt $ map (i2e p) s
@@ -93,7 +100,7 @@ range s p = Alt $ map (i2e p) s
 printE :: Int -> Expr -> [String]
 printE 0 (Seq s) = ["seq["] ++ (concatMap (printE 1) s) ++ ["]"]
 printE 0 (Alt s) = ["alt["] ++ (concatMap (printE 1) s) ++ ["]"]
-printE 0 (Set s) = [s]
+printE 0 (Set s) = [show s]
 printE i x = map (indent ++) (printE 0 x)
   where indent = replicate (i * 4) ' '
 
@@ -120,8 +127,8 @@ instance Show Expr where
 -- 		      (coerce to 'list))))
 
 main = do
---   print $ squeeze (range [1, 2..365] 7)
---   print $ squeeze (range [3, 4..7] 3)
---   print $ squeeze (range [3, 5..37] 0)
-   print $ squeeze (range [1, 2..1000000] 1)
+    --   print $ squeeze (range [1, 2..365] 7)
+    --   print $ squeeze (range [3, 4..7] 3)
+    --   print $ squeeze (range [3, 5..37] 0)
+    print $ squeeze (range [1, 2..31] 1)
 
