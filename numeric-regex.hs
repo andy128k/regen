@@ -32,23 +32,42 @@ joinSeq (RSeq p) (RSeq q) = RSeq $ p S.>< q
 prependSeq :: Expr -> RSeq -> RSeq
 prependSeq e (RSeq q) = RSeq $ e S.<| q
 
+appendSeq :: Expr -> RSeq -> RSeq
+appendSeq e (RSeq q) = RSeq $ q S.|> e
+
 newSeq :: [Expr] -> RSeq
 newSeq l = RSeq $ S.fromList l
 
 
-data Expr = Set CharSet | Seq (RSeq) | Alt [Expr] deriving (Eq)
+data RAlt = RAlt CharSet [RSeq] deriving (Eq)
+
+data Expr = Set CharSet | Seq (RSeq) | Alt RAlt deriving (Eq)
 
 
-alt2 :: Expr -> Expr -> Expr
-alt2 (Alt x) (Alt y) = Alt (x ++ y)
-alt2 (Alt x) y = Alt (x ++ [y])
-alt2 x (Alt y) = Alt (x : y)
-alt2 (Set x) (Set y) = Set (x >< y)
-alt2 x y = Alt [x, y]
+-- alt2 :: Expr -> Expr -> Expr
+-- alt2 (Alt x) (Alt y) = Alt (x ++ y)
+-- alt2 (Alt x) y = Alt (x ++ [y])
+-- alt2 x (Alt y) = Alt (x : y)
+-- alt2 (Set x) (Set y) = Set (x >< y)
+-- alt2 x y = Alt [x, y]
+
+-- alt :: [Expr] -> Expr
+-- alt [x] = x
+-- alt x = Data.List.foldl1 alt2 x
+
+alt2 :: RAlt -> Expr -> RAlt
+alt2 (RAlt c s) (Alt (RAlt c2 s2)) = RAlt (c >< c2) (s ++ s2)
+alt2 (RAlt c s) (Seq s2) = RAlt c (s ++ [s2])
+alt2 (RAlt c s) (Set c2) = RAlt (c >< c2) s
+
+alt1 :: [Expr] -> RAlt
+alt1 x = Data.List.foldl alt2 (RAlt empty []) x
 
 alt :: [Expr] -> Expr
 alt [x] = x
-alt x = Data.List.foldl1 alt2 x
+alt x = case alt1 x of
+  RAlt c [] -> Set c
+  x1 -> Alt x1
 
 
 flattened :: RSeq -> RSeq
@@ -69,13 +88,13 @@ mseq x
 mseq x = Seq $ flattened x
 
 
-detect :: (CharSet, [RSeq], [Expr]) -> Expr -> (CharSet, [RSeq], [Expr])
-detect (r, s, a) (Set chars) = (r >< chars, s, a)
-detect (r, s, a) (Seq exprs) = (r, s ++ [exprs], a)
-detect (r, s, a) (Alt exprs) = (r, s, a ++ exprs)
+-- detect :: (CharSet, [RSeq], [Expr]) -> Expr -> (CharSet, [RSeq], [Expr])
+-- detect (r, s, a) (Set chars) = (r >< chars, s, a)
+-- detect (r, s, a) (Seq exprs) = (r, s ++ [exprs], a)
+-- detect (r, s, a) (Alt exprs) = (r, s, a ++ exprs)
 
-split :: [Expr] -> (CharSet, [RSeq], [Expr])
-split l = Data.List.foldl detect (empty, [], []) l
+-- split :: [Expr] -> (CharSet, [RSeq], [Expr])
+-- split l = Data.List.foldl detect (empty, [], []) l
 
 
 -- partitionx :: Eq a => ([b] -> b) -> ([b] -> [b]) -> [[a]] -> [(a, [[a]])]
@@ -93,9 +112,10 @@ partition1 = partitionx headSeq tailSeq
 partition9 = partitionx lastSeq initSeq
 
 
-sq_seq :: [RSeq] -> [Expr]
+sq_seq :: [RSeq] -> [RSeq]
 sq_seq sequences =
-  map Seq $ (sf . pr) sequences
+--  sf $ pr sequences
+  pr sequences
   where
     pr :: [RSeq] -> [RSeq]
     pr x = map prepend $ partition1 x
@@ -112,31 +132,22 @@ sq_seq sequences =
 
 squeeze :: Expr -> Expr
 squeeze (Seq (RSeq s)) = mseq $ newSeq (map squeeze (toList s))
-squeeze (Alt s) = case split s of
-  (chars, sequences, alternates) -> alt (
-      (makeChars chars) ++
-      (sq_seq sequences) ++
-      alternates )
-  where
-    makeChars :: CharSet -> [Expr]
-    makeChars chars = if (isEmpty chars)
-                      then []
-                      else [Set chars]
+squeeze (Alt (RAlt chars sequences)) = Alt $ RAlt chars (sq_seq sequences)
 squeeze s = s
 
 
 pad p s = (replicate (p - (length s)) '0') ++ s
 
-i2e :: Int -> Int -> Expr
-i2e p i = mseq (newSeq $ map (\x -> Set $ single x) ((pad p) $ show i))
+i2e :: Int -> Int -> RSeq
+i2e p i = (newSeq $ map (\x -> Set $ single x) ((pad p) $ show i))
 
 range :: [Int] -> Int -> Expr
-range s p = Alt $ map (i2e p) s
+range s p = Alt (RAlt empty (map (i2e p) s))
 
 
 printE :: Int -> Expr -> [String]
 printE 0 (Seq (RSeq s)) = ["seq["] ++ (Data.List.concatMap (printE 1) (toList s)) ++ ["]"]
-printE 0 (Alt s) = ["alt["] ++ (Data.List.concatMap (printE 1) s) ++ ["]"]
+printE 0 (Alt (RAlt c s)) = ["alt["] ++ (printE 1 (Set c)) ++ (Data.List.concatMap (printE 1) (map Seq s)) ++ ["]"]
 printE 0 (Set s) = [show s]
 printE i x = map (indent ++) (printE 0 x)
   where indent = replicate (i * 4) ' '
