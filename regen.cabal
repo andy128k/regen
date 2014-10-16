@@ -19,7 +19,8 @@ cabal-version:       >=1.10
 executable regen
   main-is:             Main.hs
   other-modules:
-    CharSet
+    CharSet,
+    Seq
 
   -- other-extensions:    
   build-depends:

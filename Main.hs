@@ -1,47 +1,14 @@
 module Main (main) where
 
 import Control.Monad
-import Data.Foldable
-import qualified Data.Sequence as S
+-- import Data.Foldable
 import Data.List
 import CharSet
+import Seq
 
-newtype RSeq = RSeq (S.Seq Expr) deriving (Eq)
+data RAlt = RAlt CharSet [RSeq Expr] deriving (Eq)
 
-isEmptySeq :: RSeq -> Bool
-isEmptySeq (RSeq s) = S.null s
-
-lengthSeq :: RSeq -> Int
-lengthSeq (RSeq q) = S.length q
-
-headSeq :: RSeq -> Expr
-headSeq (RSeq q) = S.index q 0
-
-tailSeq :: RSeq -> RSeq
-tailSeq (RSeq q) = RSeq $ S.drop 1 q
-
-lastSeq :: RSeq -> Expr
-lastSeq (RSeq q) = S.index q ((S.length q) - 1)
-
-initSeq :: RSeq -> RSeq
-initSeq (RSeq q) = RSeq $ S.take ((S.length q) - 1) q
-
-joinSeq :: RSeq -> RSeq -> RSeq
-joinSeq (RSeq p) (RSeq q) = RSeq $ p S.>< q
-
-prependSeq :: Expr -> RSeq -> RSeq
-prependSeq e (RSeq q) = RSeq $ e S.<| q
-
-appendSeq :: Expr -> RSeq -> RSeq
-appendSeq e (RSeq q) = RSeq $ q S.|> e
-
-newSeq :: [Expr] -> RSeq
-newSeq l = RSeq $ S.fromList l
-
-
-data RAlt = RAlt CharSet [RSeq] deriving (Eq)
-
-data Expr = Set CharSet | Seq (RSeq) | Alt RAlt deriving (Eq)
+data Expr = Set CharSet | Seq (RSeq Expr) | Alt RAlt deriving (Eq)
 
 
 -- alt2 :: Expr -> Expr -> Expr
@@ -70,7 +37,7 @@ alt x = case alt1 x of
   x1 -> Alt x1
 
 
-flattened :: RSeq -> RSeq
+flattened :: RSeq Expr -> RSeq Expr
 flattened x
   | isEmptySeq x = x
 flattened x = case headSeq x of
@@ -78,7 +45,7 @@ flattened x = case headSeq x of
   h     -> prependSeq h (flattened $ tailSeq x)
 
 
-mseq :: RSeq -> Expr
+mseq :: RSeq Expr -> Expr
 mseq x
   | isEmptySeq x = Set empty
 
@@ -105,33 +72,33 @@ partitionx head tail sequences =
     startsWith v = filter (\x -> v == (head x)) sequences
 
 
-partition1 :: [RSeq] -> [(Expr, [RSeq])]
+partition1 :: [RSeq Expr] -> [(Expr, [RSeq Expr])]
 partition1 = partitionx headSeq tailSeq
 
 -- partition9 :: Eq a => [[a]] -> [(a, [[a]])]
 partition9 = partitionx lastSeq initSeq
 
 
-sq_seq :: [RSeq] -> [RSeq]
+sq_seq :: [RSeq Expr] -> [RSeq Expr]
 sq_seq sequences =
 --  sf $ pr sequences
   pr sequences
   where
-    pr :: [RSeq] -> [RSeq]
+    pr :: [RSeq Expr] -> [RSeq Expr]
     pr x = map prepend $ partition1 x
 
-    sf :: [RSeq] -> [RSeq]
+    sf :: [RSeq Expr] -> [RSeq Expr]
     sf x = map append $ partition9 x
 
-    prepend :: (Expr, [RSeq]) -> RSeq
+    prepend :: (Expr, [RSeq Expr]) -> RSeq Expr
     prepend (start, seqs) = flattened $ newSeq [start, (squeeze (alt (map mseq seqs)))]
 
-    append :: (Expr, [RSeq]) -> RSeq
+    append :: (Expr, [RSeq Expr]) -> RSeq Expr
     append (end, seqs) = flattened $ newSeq [(squeeze (alt (map mseq seqs))), end]
 
 
 squeeze :: Expr -> Expr
-squeeze (Seq (RSeq s)) = mseq $ newSeq (map squeeze (toList s))
+squeeze (Seq s) = mseq $ newSeq $ foldSeq (\x -> \v -> x ++ [squeeze v]) [] s
 squeeze (Alt (RAlt chars sequences)) = Alt $ RAlt chars (sq_seq sequences)
 squeeze s = s
 
@@ -139,7 +106,7 @@ squeeze s = s
 range :: [String] -> Expr
 range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map i2e s)
     where
-      altEmAll :: RAlt -> Either CharSet RSeq -> RAlt
+      altEmAll :: RAlt -> Either CharSet (RSeq Expr) -> RAlt
       altEmAll (RAlt c s) (Left c2) = RAlt (c >< c2) s
       altEmAll (RAlt c s) (Right s2) = RAlt c (s ++ [s2])
 
@@ -150,7 +117,7 @@ range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map i2e s)
 
 
 printE :: Int -> Expr -> [String]
-printE 0 (Seq (RSeq s)) = ["seq["] ++ (Data.List.concatMap (printE 1) (toList s)) ++ ["]"]
+printE 0 (Seq s) = ["seq["] ++ (foldSeq (\x -> \v -> x ++ (printE 1 v)) [] s) ++ ["]"]
 printE 0 (Alt (RAlt c s)) = ["alt["] ++ (printE 1 (Set c)) ++ (Data.List.concatMap (printE 1) (map Seq s)) ++ ["]"]
 printE 0 (Set s) = [show s]
 printE i x = map (indent ++) (printE 0 x)
@@ -190,5 +157,5 @@ main = do
   --   print $ squeeze (range [1, 2..365] 7)
   --   print $ squeeze (range [3, 4..7] 3)
   --   print $ squeeze (range [3, 5..37] 0)
-  print $ squeeze $ range $ numbers [1, 2..31] 1
+  print $ squeeze $ range $ numbers [1, 2..31] 3
         
