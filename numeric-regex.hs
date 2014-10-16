@@ -136,14 +136,26 @@ squeeze (Alt (RAlt chars sequences)) = Alt $ RAlt chars (sq_seq sequences)
 squeeze s = s
 
 
+pad :: Int -> String -> String
 pad p s = (replicate (p - (length s)) '0') ++ s
 
-i2e :: Int -> Int -> RSeq
-i2e p i = (newSeq $ map (\x -> Set $ single x) ((pad p) $ show i))
+
+i2e :: Int -> Int -> Either CharSet RSeq
+i2e p i = case rstr of
+            []  -> error "empty input line"
+            [c] -> Left c
+            s   -> Right $ newSeq (map Set s)
+    where
+      str = (pad p (show i))
+      rstr = map single str
+
 
 range :: [Int] -> Int -> Expr
-range s p = Alt (RAlt empty (map (i2e p) s))
-
+range s p = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map (i2e p) s)
+    where
+      altEmAll :: RAlt -> Either CharSet RSeq -> RAlt
+      altEmAll (RAlt c s) (Left c2) = RAlt (c >< c2) s
+      altEmAll (RAlt c s) (Right s2) = RAlt c (s ++ [s2])
 
 printE :: Int -> Expr -> [String]
 printE 0 (Seq (RSeq s)) = ["seq["] ++ (Data.List.concatMap (printE 1) (toList s)) ++ ["]"]
@@ -175,8 +187,8 @@ instance Show Expr where
 -- 		      (coerce to 'list))))
 
 main = do
-    --   print $ squeeze (range [1, 2..365] 7)
-    --   print $ squeeze (range [3, 4..7] 3)
-    --   print $ squeeze (range [3, 5..37] 0)
-    print $ squeeze (range [1, 2..31] 1)
-
+  --   print $ squeeze (range [1, 2..365] 7)
+  --   print $ squeeze (range [3, 4..7] 3)
+  --   print $ squeeze (range [3, 5..37] 0)
+  print $ squeeze (range [1, 2..31] 1)
+        
