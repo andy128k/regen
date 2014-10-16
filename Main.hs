@@ -1,7 +1,6 @@
 module Main (main) where
 
 import Control.Monad
--- import Data.Foldable
 import Data.List
 import CharSet
 import Seq
@@ -10,17 +9,6 @@ data RAlt = RAlt CharSet [RSeq Expr] deriving (Eq)
 
 data Expr = Set CharSet | Seq (RSeq Expr) | Alt RAlt deriving (Eq)
 
-
--- alt2 :: Expr -> Expr -> Expr
--- alt2 (Alt x) (Alt y) = Alt (x ++ y)
--- alt2 (Alt x) y = Alt (x ++ [y])
--- alt2 x (Alt y) = Alt (x : y)
--- alt2 (Set x) (Set y) = Set (x >< y)
--- alt2 x y = Alt [x, y]
-
--- alt :: [Expr] -> Expr
--- alt [x] = x
--- alt x = Data.List.foldl1 alt2 x
 
 alt2 :: RAlt -> Expr -> RAlt
 alt2 (RAlt c s) (Alt (RAlt c2 s2)) = RAlt (c >< c2) (s ++ s2)
@@ -55,15 +43,6 @@ mseq x
 mseq x = Seq $ flattened x
 
 
--- detect :: (CharSet, [RSeq], [Expr]) -> Expr -> (CharSet, [RSeq], [Expr])
--- detect (r, s, a) (Set chars) = (r >< chars, s, a)
--- detect (r, s, a) (Seq exprs) = (r, s ++ [exprs], a)
--- detect (r, s, a) (Alt exprs) = (r, s, a ++ exprs)
-
--- split :: [Expr] -> (CharSet, [RSeq], [Expr])
--- split l = Data.List.foldl detect (empty, [], []) l
-
-
 -- partitionx :: Eq a => ([b] -> b) -> ([b] -> [b]) -> [[a]] -> [(a, [[a]])]
 partitionx head tail sequences =
   map (\group -> (group, map tail (startsWith group))) groups
@@ -75,14 +54,13 @@ partitionx head tail sequences =
 partition1 :: [RSeq Expr] -> [(Expr, [RSeq Expr])]
 partition1 = partitionx headSeq tailSeq
 
--- partition9 :: Eq a => [[a]] -> [(a, [[a]])]
+partition9 :: [RSeq Expr] -> [(Expr, [RSeq Expr])]
 partition9 = partitionx lastSeq initSeq
 
 
 sq_seq :: [RSeq Expr] -> [RSeq Expr]
 sq_seq sequences =
---  sf $ pr sequences
-  pr sequences
+  sf $ pr sequences
   where
     pr :: [RSeq Expr] -> [RSeq Expr]
     pr x = map prepend $ partition1 x
