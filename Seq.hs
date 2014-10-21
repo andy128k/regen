@@ -1,4 +1,4 @@
-module Seq (RSeq, isEmptySeq, lengthSeq, headSeq, tailSeq, lastSeq, initSeq, joinSeq, prependSeq, appendSeq, newSeq) where
+module Seq (RSeq, headSeq, tailSeq, lastSeq, initSeq, joinSeq, prependSeq, appendSeq, newSeq) where
 
 import Control.Monad
 import Data.Foldable as F
@@ -13,12 +13,6 @@ instance Functor RSeq where
 instance F.Foldable RSeq where
  foldr f z (RSeq s) = F.foldr f z s
 
-
-isEmptySeq :: RSeq a -> Bool
-isEmptySeq (RSeq s) = S.null s
-
-lengthSeq :: RSeq a -> Int
-lengthSeq (RSeq q) = S.length q
 
 headSeq :: RSeq a -> a
 headSeq (RSeq q) = S.index q 0
@@ -51,6 +45,6 @@ prependSeq e (RSeq q) = RSeq $ e S.<| q
 appendSeq :: RSeq a -> a -> RSeq a
 appendSeq (RSeq q) e = RSeq $ q S.|> e
 
-newSeq :: [a] -> RSeq a
-newSeq l = RSeq $ S.fromList l
+newSeq :: a -> a -> RSeq a
+newSeq s1 s2 = RSeq $ S.fromList [s1, s2]
 

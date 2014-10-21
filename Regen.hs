@@ -27,8 +27,6 @@ alt x = case alt1 x of
 
 
 flattened :: RSeq Expr -> RSeq Expr
-flattened x
-  | isEmptySeq x = x
 flattened x = case (headSeq x, tailSeq x) of
   (Seq s, Left t) ->                flattened (joinSeq s t)
   (Seq s, Right t) ->               flattened (appendSeq s t)
@@ -37,12 +35,6 @@ flattened x = case (headSeq x, tailSeq x) of
 
 
 mseq :: RSeq Expr -> Expr
-mseq x
-  | isEmptySeq x = Set empty
-
-mseq x
-  | (1 == lengthSeq x) = headSeq x
-
 mseq x = Seq $ flattened x
 
 
@@ -78,10 +70,10 @@ sq_seq sequences =
     sf x = map append $ partition9 x
 
     prepend :: (Expr, [Either (RSeq Expr) Expr]) -> RSeq Expr
-    prepend (start, seqs) = flattened $ newSeq [start, squeeze $ alts seqs]
+    prepend (start, seqs) = flattened $ newSeq start (squeeze $ alts seqs)
 
     append :: (Expr, [Either (RSeq Expr) Expr]) -> RSeq Expr
-    append (end, seqs) = flattened $ newSeq [squeeze $ alts seqs, end]
+    append (end, seqs) = flattened $ newSeq (squeeze $ alts seqs) end
 
     alts :: [Either (RSeq Expr) Expr] -> Expr
     alts seqs = alt (map mseq1 seqs)
@@ -93,17 +85,19 @@ squeeze (Alt (RAlt chars sequences)) = Alt $ RAlt chars (sq_seq sequences)
 squeeze s = s
 
 
+str2expr :: String -> Either CharSet (RSeq Expr) -- RSeq CharSet
+str2expr str = case str of
+  []       -> error "empty input line"
+  [c]      -> Left $ single c
+  c1:c2:cs -> Right $ Data.List.foldl appendSeq (newSeq (Set $ single c1) (Set $ single c2)) (map (Set . single) cs)
+
+
 range :: [String] -> Expr
-range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map i2e s)
+range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map str2expr s)
     where
       altEmAll :: RAlt -> Either CharSet (RSeq Expr) -> RAlt
       altEmAll (RAlt c s) (Left c2) = RAlt (c >< c2) s
       altEmAll (RAlt c s) (Right s2) = RAlt c (s ++ [s2])
-
-      i2e str = case str of
-                  []  -> error "empty input line"
-                  [c] -> Left $ single c
-                  s   -> Right $ newSeq (map (Set . single) s)
 
 
 printE :: Int -> Expr -> [String]
