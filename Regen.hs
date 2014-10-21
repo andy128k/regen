@@ -7,9 +7,9 @@ import Data.Foldable as F
 import CharSet
 import Seq
 
-data RAlt = RAlt CharSet [RSeq Expr] deriving (Eq)
-
-data Expr = Set CharSet | Seq (RSeq Expr) | Alt RAlt deriving (Eq)
+type TSeq = RSeq Expr
+data RAlt = RAlt CharSet [TSeq] deriving (Eq)
+data Expr = Set CharSet | Seq TSeq | Alt RAlt deriving (Eq)
 
 
 alt2 :: RAlt -> Expr -> RAlt
@@ -18,7 +18,7 @@ alt2 (RAlt c s) (Seq s2) = RAlt c (s ++ [s2])
 alt2 (RAlt c s) (Set c2) = RAlt (c >< c2) s
 
 
-flattened :: RSeq Expr -> RSeq Expr
+flattened :: TSeq -> TSeq
 flattened x = case (headSeq x, tailSeq x) of
   (Seq s, Left t) ->                flattened (joinSeq s t)
   (Seq s, Right t) ->               flattened (appendSeq s t)
@@ -34,30 +34,30 @@ partitionx head tail sequences =
     startsWith v = filter (\x -> v == (head x)) sequences
 
 
-partition1 :: [RSeq Expr] -> [(Expr, [Either (RSeq Expr) Expr])]
+partition1 :: [TSeq] -> [(Expr, [Either TSeq Expr])]
 partition1 = partitionx headSeq tailSeq
 
-partition9 :: [RSeq Expr] -> [(Expr, [Either (RSeq Expr) Expr])]
+partition9 :: [TSeq] -> [(Expr, [Either TSeq Expr])]
 partition9 = partitionx lastSeq initSeq
 
 
-sq_seq :: [RSeq Expr] -> [RSeq Expr]
+sq_seq :: [TSeq] -> [TSeq]
 sq_seq sequences =
   sf $ pr sequences
   where
-    pr :: [RSeq Expr] -> [RSeq Expr]
+    pr :: [TSeq] -> [TSeq]
     pr x = map prepend $ partition1 x
 
-    sf :: [RSeq Expr] -> [RSeq Expr]
+    sf :: [TSeq] -> [TSeq]
     sf x = map append $ partition9 x
 
-    prepend :: (Expr, [Either (RSeq Expr) Expr]) -> RSeq Expr
+    prepend :: (Expr, [Either TSeq Expr]) -> TSeq
     prepend (start, seqs) = flattened $ newSeq start (squeeze $ alts seqs)
 
-    append :: (Expr, [Either (RSeq Expr) Expr]) -> RSeq Expr
+    append :: (Expr, [Either TSeq Expr]) -> TSeq
     append (end, seqs) = flattened $ newSeq (squeeze $ alts seqs) end
 
-    alts :: [Either (RSeq Expr) Expr] -> Expr
+    alts :: [Either TSeq Expr] -> Expr
     alts seqs = alt ((map (Seq . flattened) ls) ++ rs)
       where
         (ls, rs) = partitionEithers seqs
@@ -78,7 +78,7 @@ squeeze (Alt (RAlt chars sequences)) = Alt $ RAlt chars (sq_seq sequences)
 squeeze s = s
 
 
-str2expr :: String -> Either CharSet (RSeq Expr) -- RSeq CharSet
+str2expr :: String -> Either CharSet TSeq -- RSeq CharSet
 str2expr str = case str of
   []       -> error "empty input line"
   [c]      -> Left $ single c
@@ -88,7 +88,7 @@ str2expr str = case str of
 range :: [String] -> Expr
 range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map str2expr s)
     where
-      altEmAll :: RAlt -> Either CharSet (RSeq Expr) -> RAlt
+      altEmAll :: RAlt -> Either CharSet TSeq -> RAlt
       altEmAll (RAlt c s) (Left c2) = RAlt (c >< c2) s
       altEmAll (RAlt c s) (Right s2) = RAlt c (s ++ [s2])
 
