@@ -2,6 +2,7 @@ module Regen where
 
 import Control.Monad
 import Data.List
+import Data.Foldable as F
 import CharSet
 import Seq
 
@@ -87,7 +88,7 @@ sq_seq sequences =
 
 
 squeeze :: Expr -> Expr
-squeeze (Seq s) = mseq $ newSeq $ foldSeq (\x -> \v -> x ++ [squeeze v]) [] s
+squeeze (Seq s) = mseq $ fmap squeeze s
 squeeze (Alt (RAlt chars sequences)) = Alt $ RAlt chars (sq_seq sequences)
 squeeze s = s
 
@@ -106,7 +107,7 @@ range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map i2e s)
 
 
 printE :: Int -> Expr -> [String]
-printE 0 (Seq s) = ["seq["] ++ (foldSeq (\x -> \v -> x ++ (printE 1 v)) [] s) ++ ["]"]
+printE 0 (Seq s) = ["seq["] ++ (F.concatMap (printE 1) s) ++ ["]"]
 printE 0 (Alt (RAlt c s)) = ["alt["] ++ (printE 1 (Set c)) ++ (Data.List.concatMap (printE 1) (map Seq s)) ++ ["]"]
 printE 0 (Set s) = [show s]
 printE i x = map (indent ++) (printE 0 x)
