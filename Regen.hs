@@ -2,6 +2,7 @@ module Regen where
 
 import Control.Monad
 import Data.List
+import Data.Either
 import Data.Foldable as F
 import CharSet
 import Seq
@@ -16,15 +17,6 @@ alt2 (RAlt c s) (Alt (RAlt c2 s2)) = RAlt (c >< c2) (s ++ s2)
 alt2 (RAlt c s) (Seq s2) = RAlt c (s ++ [s2])
 alt2 (RAlt c s) (Set c2) = RAlt (c >< c2) s
 
-alt1 :: [Expr] -> RAlt
-alt1 x = Data.List.foldl alt2 (RAlt empty []) x
-
-alt :: [Expr] -> Expr
-alt [x] = x
-alt x = case alt1 x of
-  RAlt c [] -> Set c
-  x1 -> Alt x1
-
 
 flattened :: RSeq Expr -> RSeq Expr
 flattened x = case (headSeq x, tailSeq x) of
@@ -32,16 +24,6 @@ flattened x = case (headSeq x, tailSeq x) of
   (Seq s, Right t) ->               flattened (appendSeq s t)
   (h, Left t)      -> prependSeq h (flattened t)
   (h, Right t)     -> x
-
-
-mseq :: RSeq Expr -> Expr
-mseq x = Seq $ flattened x
-
-
-mseq1 :: Either (RSeq Expr) Expr -> Expr
-mseq1 (Left x) = Seq $ flattened x
-mseq1 (Right x) = x
-
 
 
 -- partitionx :: Eq a => ([b] -> b) -> ([b] -> [b]) -> [[a]] -> [(a, [[a]])]
@@ -76,11 +58,22 @@ sq_seq sequences =
     append (end, seqs) = flattened $ newSeq (squeeze $ alts seqs) end
 
     alts :: [Either (RSeq Expr) Expr] -> Expr
-    alts seqs = alt (map mseq1 seqs)
+    alts seqs = alt ((map (Seq . flattened) ls) ++ rs)
+      where
+        (ls, rs) = partitionEithers seqs
+
+    alt :: [Expr] -> Expr
+    alt [x] = x
+    alt x = case alt1 x of
+      RAlt c [] -> Set c
+      x1        -> Alt x1
+
+    alt1 :: [Expr] -> RAlt
+    alt1 x = Data.List.foldl alt2 (RAlt empty []) x
 
 
 squeeze :: Expr -> Expr
-squeeze (Seq s) = mseq $ fmap squeeze s
+squeeze (Seq s) = Seq $ flattened $ fmap squeeze s
 squeeze (Alt (RAlt chars sequences)) = Alt $ RAlt chars (sq_seq sequences)
 squeeze s = s
 
