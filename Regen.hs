@@ -28,9 +28,11 @@ alt x = case alt1 x of
 flattened :: RSeq Expr -> RSeq Expr
 flattened x
   | isEmptySeq x = x
-flattened x = case headSeq x of
-  Seq s ->               flattened (joinSeq s (tailSeq x))
-  h     -> prependSeq h (flattened $ tailSeq x)
+flattened x = case (headSeq x, tailSeq x) of
+  (Seq s, Left t) ->                flattened (joinSeq s t)
+  (Seq s, Right t) ->               flattened (appendSeq s t)
+  (h, Left t)      -> prependSeq h (flattened t)
+  (h, Right t)     -> x
 
 
 mseq :: RSeq Expr -> Expr
@@ -43,6 +45,12 @@ mseq x
 mseq x = Seq $ flattened x
 
 
+mseq1 :: Either (RSeq Expr) Expr -> Expr
+mseq1 (Left x) = Seq $ flattened x
+mseq1 (Right x) = x
+
+
+
 -- partitionx :: Eq a => ([b] -> b) -> ([b] -> [b]) -> [[a]] -> [(a, [[a]])]
 partitionx head tail sequences =
   map (\group -> (group, map tail (startsWith group))) groups
@@ -51,10 +59,10 @@ partitionx head tail sequences =
     startsWith v = filter (\x -> v == (head x)) sequences
 
 
-partition1 :: [RSeq Expr] -> [(Expr, [RSeq Expr])]
+partition1 :: [RSeq Expr] -> [(Expr, [Either (RSeq Expr) Expr])]
 partition1 = partitionx headSeq tailSeq
 
-partition9 :: [RSeq Expr] -> [(Expr, [RSeq Expr])]
+partition9 :: [RSeq Expr] -> [(Expr, [Either (RSeq Expr) Expr])]
 partition9 = partitionx lastSeq initSeq
 
 
@@ -68,11 +76,14 @@ sq_seq sequences =
     sf :: [RSeq Expr] -> [RSeq Expr]
     sf x = map append $ partition9 x
 
-    prepend :: (Expr, [RSeq Expr]) -> RSeq Expr
-    prepend (start, seqs) = flattened $ newSeq [start, (squeeze (alt (map mseq seqs)))]
+    prepend :: (Expr, [Either (RSeq Expr) Expr]) -> RSeq Expr
+    prepend (start, seqs) = flattened $ newSeq [start, squeeze $ alts seqs]
 
-    append :: (Expr, [RSeq Expr]) -> RSeq Expr
-    append (end, seqs) = flattened $ newSeq [(squeeze (alt (map mseq seqs))), end]
+    append :: (Expr, [Either (RSeq Expr) Expr]) -> RSeq Expr
+    append (end, seqs) = flattened $ newSeq [squeeze $ alts seqs, end]
+
+    alts :: [Either (RSeq Expr) Expr] -> Expr
+    alts seqs = alt (map mseq1 seqs)
 
 
 squeeze :: Expr -> Expr

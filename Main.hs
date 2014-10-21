@@ -23,5 +23,5 @@ main = do
   --   print $ squeeze (range [1, 2..365] 7)
   --   print $ squeeze (range [3, 4..7] 3)
   --   print $ squeeze (range [3, 5..37] 0)
-  print $ squeeze $ range $ numbers [1, 2..9] 0
+  print $ squeeze $ range $ numbers [1, 2..31] 0
 
