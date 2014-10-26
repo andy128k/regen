@@ -20,7 +20,7 @@ propCharSetSingle ch = s C.>< s == s
 
 
 test09 :: Assertion
-test09 = (squeeze $ range $ numbers [1, 2..9] 0) @?= (Set $ C.single '0')
+test09 = (squeeze $ range $ numbers [1, 2..9] 0) @?= (Alt $ RAlt (C.single '0') [])
 
 --    for (from to) in '(("0" "9")
 -- 		      ("0" "0")

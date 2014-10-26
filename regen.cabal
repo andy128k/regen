@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 
 executable regen
   main-is:             Main.hs
+  hs-source-dirs:      ., src
   other-modules:
     TwoOrMore,
     CharSet,
@@ -34,7 +35,8 @@ executable regen
 
 Test-Suite test
   type:                exitcode-stdio-1.0
-  main-is:             t/Samples.hs
+  main-is:             Samples.hs
+  hs-source-dirs:      ., src, t
   build-depends:
     base >=4.6 && <4.7,
     containers,
