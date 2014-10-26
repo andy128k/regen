@@ -45,14 +45,16 @@ sq_seq sequences =
     sf x = map append $ partition9 x
 
     prepend :: (TSeqItem, [Either TSeq TSeqItem]) -> TSeq
-    prepend (start, [Left s])          = prependSeq start s
-    prepend (start, seqs)              = newSeq start (squeeze $ alts seqs)
+    prepend (start, [Left tail])  = prependSeq start tail
+    prepend (start, [Right tail]) = newSeq start tail
+    prepend (start, tails)        = newSeq start (Right $ squeezeAlt $ alts tails)
 
     append :: (TSeqItem, [Either TSeq TSeqItem]) -> TSeq
-    append (end, [Left s])          = appendSeq s end
-    append (end, seqs)              = newSeq (squeeze $ alts seqs) end
+    append (end, [Left init])     = appendSeq init end
+    append (end, [Right init])    = newSeq init end
+    append (end, inits)           = newSeq (Right $ squeezeAlt $ alts inits) end
 
-    alts :: [Either TSeq TSeqItem] -> Expr
+    alts :: [Either TSeq TSeqItem] -> RAlt -- length > 1
     alts seqs = alt (cs ++ cs2) (ss ++ ss2)
       where
         (ss, rs) = partitionEithers seqs
@@ -60,19 +62,21 @@ sq_seq sequences =
         cs2 = map (\a -> case a of RAlt x y -> x) as
         ss2 = Data.List.concatMap (\a -> case a of RAlt x y -> y) as
 
-    alt :: [CharSet] -> [TSeq] -> Expr
-    alt cs [] = Set (Data.List.foldl (><) empty cs)
-    alt cs ss = Alt $ RAlt (Data.List.foldl (><) empty cs) ss
-    alt [] [x] = Seq x
-    alt [] ss = Alt $ RAlt empty ss
+    alt :: [CharSet] -> [TSeq] -> RAlt
+    alt cs ss = RAlt (Data.List.foldl (><) empty cs) ss
 
 --    alt1 :: [Expr] -> RAlt
     alt1 x = Data.List.foldl alt2 (RAlt empty []) x
 
+squeezeAlt :: RAlt -> RAlt
+squeezeAlt (RAlt chars sequences) = RAlt chars (sq_seq sequences)
 
 squeeze :: Expr -> Expr
-squeeze (Seq s) = Seq $ fmap squeeze s
-squeeze (Alt (RAlt chars sequences)) = Alt $ RAlt chars (sq_seq sequences)
+squeeze (Seq s) = Seq $ fmap sq s
+    where
+      sq (Left c) = Left c
+      sq (Right a) = Right $ squeezeAlt a
+squeeze (Alt r) = Alt $ squeezeAlt r
 squeeze s = s
 
 
@@ -90,9 +94,12 @@ range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map str2expr s)
       altEmAll (RAlt c s) (Left c2) = RAlt (c >< c2) s
       altEmAll (RAlt c s) (Right s2) = RAlt c (s ++ [s2])
 
+sss :: TSeqItem -> Expr
+sss (Left s) = Set s
+sss (Right a) = Alt a
 
 printE :: Int -> Expr -> [String]
-printE 0 (Seq s) = ["seq["] ++ (F.concatMap (printE 1) s) ++ ["]"]
+printE 0 (Seq s) = ["seq["] ++ (F.concatMap (\x -> printE 1 (sss x)) s) ++ ["]"]
 printE 0 (Alt (RAlt c s)) = ["alt["] ++ (printE 1 (Set c)) ++ (Data.List.concatMap (printE 1) (map Seq s)) ++ ["]"]
 printE 0 (Set s) = [show s]
 printE i x = map (indent ++) (printE 0 x)
