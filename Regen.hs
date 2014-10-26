@@ -7,10 +7,10 @@ import Data.Foldable as F
 import CharSet
 import Seq
 
-type TSeqItem = Either CharSet RAlt
-type TSeq = RSeq TSeqItem
+
+type TSeq = RSeq RAlt
 data RAlt = RAlt CharSet [TSeq] deriving (Eq)
-data Expr = Set CharSet | Seq TSeq | Alt RAlt deriving (Eq)
+data Expr = Seq TSeq | Alt RAlt deriving (Eq)
 
 
 -- partitionx :: Eq a => ([b] -> b) -> ([b] -> [b]) -> [[a]] -> [(a, [[a]])]
@@ -21,10 +21,10 @@ partitionx head tail sequences =
     startsWith v = filter (\x -> v == (head x)) sequences
 
 
-partition1 :: [TSeq] -> [(TSeqItem, [Either TSeq TSeqItem])]
+partition1 :: [TSeq] -> [(RAlt, [Either TSeq RAlt])]
 partition1 = partitionx headSeq tailSeq
 
-partition9 :: [TSeq] -> [(TSeqItem, [Either TSeq TSeqItem])]
+partition9 :: [TSeq] -> [(RAlt, [Either TSeq RAlt])]
 partition9 = partitionx lastSeq initSeq
 
 
@@ -38,22 +38,21 @@ sq_seq sequences =
     sf :: [TSeq] -> [TSeq]
     sf x = map append $ partition9 x
 
-    prepend :: (TSeqItem, [Either TSeq TSeqItem]) -> TSeq
+    prepend :: (RAlt, [Either TSeq RAlt]) -> TSeq
     prepend (start, [Left tail])  = prependSeq start tail
     prepend (start, [Right tail]) = newSeq start tail
-    prepend (start, tails)        = newSeq start (Right $ squeezeAlt $ alts tails)
+    prepend (start, tails)        = newSeq start (squeezeAlt $ alts tails)
 
-    append :: (TSeqItem, [Either TSeq TSeqItem]) -> TSeq
+    append :: (RAlt, [Either TSeq RAlt]) -> TSeq
     append (end, [Left init])     = appendSeq init end
     append (end, [Right init])    = newSeq init end
-    append (end, inits)           = newSeq (Right $ squeezeAlt $ alts inits) end
+    append (end, inits)           = newSeq (squeezeAlt $ alts inits) end
 
-    alts :: [Either TSeq TSeqItem] -> RAlt -- length > 1
-    alts seqs = alt (cs ++ cs2) (ss ++ ss2)
+    alts :: [Either TSeq RAlt] -> RAlt -- length >= 2
+    alts seqs = alt cs (ss ++ ss2)
       where
-        (ss, rs) = partitionEithers seqs
-        (cs, as) = partitionEithers rs
-        cs2 = map (\a -> case a of RAlt x y -> x) as
+        (ss, as) = partitionEithers seqs
+        cs = map (\a -> case a of RAlt x y -> x) as
         ss2 = Data.List.concatMap (\a -> case a of RAlt x y -> y) as
 
     alt :: [CharSet] -> [TSeq] -> RAlt
@@ -63,19 +62,18 @@ squeezeAlt :: RAlt -> RAlt
 squeezeAlt (RAlt chars sequences) = RAlt chars (sq_seq sequences)
 
 squeeze :: Expr -> Expr
-squeeze (Seq s) = Seq $ fmap sq s
-    where
-      sq (Left c) = Left c
-      sq (Right a) = Right $ squeezeAlt a
+squeeze (Seq s) = Seq $ fmap squeezeAlt s
 squeeze (Alt r) = Alt $ squeezeAlt r
-squeeze s = s
 
+
+achar :: Char -> RAlt
+achar c = RAlt (single c) []
 
 str2expr :: String -> Either CharSet TSeq -- RSeq CharSet
 str2expr str = case str of
   []       -> error "empty input line"
   [c]      -> Left $ single c
-  c1:c2:cs -> Right $ Data.List.foldl appendSeq (newSeq (Left $ single c1) (Left $ single c2)) (map (Left . single) cs)
+  c1:c2:cs -> Right $ Data.List.foldl appendSeq (newSeq (achar c1) (achar c2)) (map achar cs)
 
 
 range :: [String] -> Expr
@@ -85,15 +83,16 @@ range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map str2expr s)
       altEmAll (RAlt c s) (Left c2) = RAlt (c >< c2) s
       altEmAll (RAlt c s) (Right s2) = RAlt c (s ++ [s2])
 
-sss :: TSeqItem -> Expr
-sss = either Set Alt
+sss :: RAlt -> Expr
+sss = Alt
 
-printE :: Int -> Expr -> [String]
-printE 0 (Seq s) = ["seq["] ++ (F.concatMap (\x -> printE 1 (sss x)) s) ++ ["]"]
-printE 0 (Alt (RAlt c s)) = ["alt["] ++ (printE 1 (Set c)) ++ (Data.List.concatMap (printE 1) (map Seq s)) ++ ["]"]
-printE 0 (Set s) = [show s]
-printE i x = map (indent ++) (printE 0 x)
-  where indent = replicate (i * 4) ' '
+shift :: [String] -> [String]
+shift x = map (indent ++) x
+  where indent = replicate 4 ' '
+
+printE :: Expr -> [String]
+printE (Seq s) = ["seq["] ++ (F.concatMap (\x -> shift $ printE (sss x)) s) ++ ["]"]
+printE (Alt (RAlt c s)) = ["alt["] ++ (shift $ [show c] ++ (Data.List.concatMap printE (map Seq s))) ++ ["]"]
 
 
 numbers :: [Int] -> Int -> [String]
@@ -105,4 +104,4 @@ pad p s = (replicate (p - (length s)) '0') ++ s
 
 
 instance Show Expr where
-  show a = intercalate "\n" $ printE 0 a
+  show a = intercalate "\n" $ printE a
