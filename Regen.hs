@@ -13,12 +13,6 @@ data RAlt = RAlt CharSet [TSeq] deriving (Eq)
 data Expr = Set CharSet | Seq TSeq | Alt RAlt deriving (Eq)
 
 
-alt2 :: RAlt -> Expr -> RAlt
-alt2 (RAlt c s) (Alt (RAlt c2 s2)) = RAlt (c >< c2) (s ++ s2)
-alt2 (RAlt c s) (Seq s2) = RAlt c (s ++ [s2])
-alt2 (RAlt c s) (Set c2) = RAlt (c >< c2) s
-
-
 -- partitionx :: Eq a => ([b] -> b) -> ([b] -> [b]) -> [[a]] -> [(a, [[a]])]
 partitionx head tail sequences =
   map (\group -> (group, map tail (startsWith group))) groups
@@ -65,9 +59,6 @@ sq_seq sequences =
     alt :: [CharSet] -> [TSeq] -> RAlt
     alt cs ss = RAlt (Data.List.foldl (><) empty cs) ss
 
---    alt1 :: [Expr] -> RAlt
-    alt1 x = Data.List.foldl alt2 (RAlt empty []) x
-
 squeezeAlt :: RAlt -> RAlt
 squeezeAlt (RAlt chars sequences) = RAlt chars (sq_seq sequences)
 
@@ -95,8 +86,7 @@ range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map str2expr s)
       altEmAll (RAlt c s) (Right s2) = RAlt c (s ++ [s2])
 
 sss :: TSeqItem -> Expr
-sss (Left s) = Set s
-sss (Right a) = Alt a
+sss = either Set Alt
 
 printE :: Int -> Expr -> [String]
 printE 0 (Seq s) = ["seq["] ++ (F.concatMap (\x -> printE 1 (sss x)) s) ++ ["]"]
