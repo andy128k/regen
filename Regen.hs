@@ -76,8 +76,8 @@ str2expr str = case str of
   c1:c2:cs -> Right $ Data.List.foldl appendSeq (newSeq (achar c1) (achar c2)) (map achar cs)
 
 
-range :: [String] -> Expr
-range s = Alt $ Data.List.foldl altEmAll (RAlt empty []) (map str2expr s)
+range :: [String] -> RAlt
+range s = Data.List.foldl altEmAll (RAlt empty []) (map str2expr s)
     where
       altEmAll :: RAlt -> Either CharSet TSeq -> RAlt
       altEmAll (RAlt c s) (Left c2) = RAlt (c >< c2) s

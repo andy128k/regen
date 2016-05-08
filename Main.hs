@@ -61,7 +61,7 @@ readInput Nothing         = getContents
 greet :: Opts -> IO ()
 greet (Opts input format) = do
   file <- readInput input
-  print $ squeeze $ range $ lines file
+  print $ squeeze $ Alt $ range $ lines file
 
 
 main :: IO ()
